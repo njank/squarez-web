@@ -1,0 +1,1602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SQUAREZ">
+<meta name="theme-color" content="#e8e8e8">
+<title>SQUAREZ</title>
+<link rel="manifest" href="/squarez/manifest.json">
+<script>
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    window._dip = e;
+    const ib = document.getElementById('install-btn');
+    if (ib) ib.style.display = '';
+  });
+  window.addEventListener('appinstalled', () => {
+    window._dip = null;
+    const ib = document.getElementById('install-btn');
+    if (ib) ib.style.display = 'none';
+  });
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    overflow: hidden;
+    background: #e8e8e8;
+    cursor: default;
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    user-select: none;
+    transition: background 0.2s;
+  }
+
+  body.dark { background: #111; }
+
+  body.playing {
+    cursor: none;
+  }
+
+  canvas {
+    display: block;
+    position: fixed;
+    top: 0; left: 0;
+    touch-action: none;
+  }
+
+  /* HUD */
+  #hud {
+    position: fixed;
+    top: 22px;
+    left: 26px;
+    z-index: 10;
+    pointer-events: none;
+    display: none;
+  }
+
+  .hud-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .hud-label {
+    font-size: 10px;
+    color: #999;
+    letter-spacing: 0.18em;
+    width: 38px;
+  }
+
+  .hud-val {
+    font-size: 16px;
+    color: #111;
+    letter-spacing: 0.04em;
+  }
+
+  /* Speed boost badge */
+  /* Overlay screens */
+  #overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(232, 232, 232, 0.55);
+  }
+
+  #overlay.hidden { display: none; }
+
+  .ov-title-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #slinky-canvas {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .ov-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(52px, 9vw, 108px);
+    font-weight: 900;
+    color: #111;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    position: relative;
+    z-index: 1;
+  }
+
+  .ov-sub {
+    margin-top: 14px;
+    font-size: 11px;
+    color: #888;
+    letter-spacing: 0.2em;
+  }
+
+  .ov-score {
+    margin-top: 36px;
+    text-align: center;
+    line-height: 1;
+  }
+
+  .ov-score .pts {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(44px, 7vw, 80px);
+    font-weight: 700;
+    color: #111;
+    display: block;
+  }
+
+  .ov-score .pts-label {
+    font-size: 10px;
+    color: #aaa;
+    letter-spacing: 0.22em;
+    display: block;
+    margin-top: 6px;
+  }
+
+  .ov-stats {
+    margin-top: 20px;
+    font-size: 11px;
+    color: #777;
+    letter-spacing: 0.12em;
+    line-height: 2.2;
+    text-align: center;
+  }
+
+  .btn-group {
+    margin-top: 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    width: 220px;
+    padding: 13px 0;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+    border: 1px solid #111;
+  }
+
+  .btn-primary {
+    background: #111;
+    color: #e8e8e8;
+  }
+  .btn-primary:hover  { background: #333; border-color: #333; }
+  .btn-primary:active { transform: scale(0.97); }
+
+  .btn-secondary {
+    background: transparent;
+    color: #555;
+    border-color: #bbb;
+  }
+  .btn-secondary:hover  { background: #f0f0f0; color: #111; border-color: #888; }
+  .btn-secondary:active { transform: scale(0.97); }
+  .btn-secondary.active { background: #111; color: #e8e8e8; border-color: #111; }
+
+  /* ── Dark mode UI overrides ───────────────────────── */
+  body.dark .hud-val          { color: #e8e8e8; }
+  body.dark .hud-label        { color: #777; }
+  body.dark .ov-title         { color: #e8e8e8; }
+  body.dark .ov-sub           { color: #777; }
+  body.dark .ov-score .pts    { color: #e8e8e8; }
+  body.dark .ov-score .pts-label { color: #666; }
+  body.dark .ov-stats         { color: #888; }
+  body.dark .leg-label        { color: #aaa; }
+  body.dark .keyboard-hints   { color: #555 !important; }
+  body.dark #overlay          { background: rgba(17,17,17,0.75); }
+
+  body.dark .btn-primary      { background: #e8e8e8; color: #111; border-color: #e8e8e8; }
+  body.dark .btn-primary:hover { background: #ccc; border-color: #ccc; }
+  body.dark .btn-secondary    { color: #aaa; border-color: #444; }
+  body.dark .btn-secondary:hover { background: #222; color: #e8e8e8; border-color: #777; }
+  body.dark .btn-secondary.active { background: #e8e8e8; color: #111; border-color: #e8e8e8; }
+
+  /* Hide keyboard shortcut hints on pointer:coarse devices with no hover
+     (pure touchscreens). Visible on mice and on hybrid laptop touchscreens
+     because those also have pointer:fine or hover:hover available.         */
+  @media (pointer: coarse) and (hover: none) {
+    .keyboard-hints { display: none; }
+  }
+
+  #legend {
+    margin-top: 32px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(4, auto);
+    grid-auto-flow: column;
+    gap: 8px 32px;
+    max-width: 360px;
+    width: 100%;
+    direction: ltr;
+  }
+
+  .leg-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: #555;
+    letter-spacing: 0.1em;
+    direction: ltr;
+  }
+
+  .leg-sq {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    outline: 1px solid rgba(0,0,0,0.12);
+  }
+
+  .leg-label {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: #555;
+  }
+
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-row"><span class="hud-label">LVL</span><span class="hud-val" id="u-lvl">1</span></div>
+  <div class="hud-row"><span class="hud-label">PTS</span><span class="hud-val" id="u-pts">0</span></div>
+  <div class="hud-row"><span class="hud-label">SZE</span><span class="hud-val" id="u-sze">1.0x</span></div>
+  <div class="hud-row"><span class="hud-label">TIM</span><span class="hud-val" id="u-tim">0:00</span></div>
+
+</div>
+
+
+<!-- Overlay -->
+<div id="overlay">
+  <div class="ov-title-wrap">
+    <canvas id="slinky-canvas"></canvas>
+    <div class="ov-title" id="ov-title">SQUAREZ</div>
+  </div>
+  <div class="ov-sub">Think Inside the Box.</div>
+
+  <div id="legend"></div>
+
+  <div class="btn-group">
+    <button class="btn-primary" id="start-btn">START GAME</button>
+    <button class="btn-secondary" id="dark-toggle-btn"></button>
+    <button class="btn-secondary" id="cb-toggle-btn"></button>
+    <button class="btn-secondary" id="install-btn" style="display:none">INSTALL APP</button>
+  </div>
+  <div class="keyboard-hints" style="margin-top:14px;font-size:10px;color:#aaa;letter-spacing:0.2em">ESC — PAUSE &nbsp;·&nbsp; TAB — COLORBLIND</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ─── Canvas ─────────────────────────────────────── */
+  const canvas = document.getElementById('c');
+  const ctx    = canvas.getContext('2d');
+  let W = 0, H = 0;
+
+  /* ─── Constants ──────────────────────────────────── */
+  // Reference resolution: 1366×768 (~1MP). SCALE keeps squares and spacing
+  // proportional across phones (small) and large monitors (big).
+  let SCALE       = 1;
+  let RED_DEFAULT = 30;
+  let BASE_UNIT   = 30;
+  const INITIAL_VAL = 500;
+  const GROWTH_FAC  = 1.4542;
+
+  function recomputeScale() {
+    SCALE       = Math.sqrt((W * H) / (1366 * 768));
+    RED_DEFAULT = Math.round(30 * SCALE);
+    BASE_UNIT   = Math.round(30 * SCALE);
+  }
+
+  function resize() {
+    W = canvas.width  = document.documentElement.clientWidth;
+    H = canvas.height = document.documentElement.clientHeight;
+    recomputeScale();
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 100));
+  resize();
+
+  /* ─── DOM refs ────────────────────────────────────── */
+  const hud      = document.getElementById('hud');
+  const overlay  = document.getElementById('overlay');
+  const hudLvl   = document.getElementById('u-lvl');
+  const hudPts   = document.getElementById('u-pts');
+  const hudSze   = document.getElementById('u-sze');
+  const hudTim   = document.getElementById('u-tim');
+
+  /* ─── Tier configuration ────────────────────────────
+     Per-tier stats for each upgrade type.              */
+  const TIER_CFG = {
+    shuriken:  { count:      [5,   8,    16,   24] },
+    lightning: { count:      [3,   5,    10,   15] },
+    bomb:      { radiusMult: [8,   10,   14,   18] },
+    boomerang: { count:      [3,   4,    6,    8],
+                 maxBounce:  [2,   3,    4,    5]  },
+    laser:     { length:     [0.2, 0.3,  0.6,  1.0],   // fraction of screen diagonal
+                 width:      [6,   10,   16,   25],
+                 durationMs: [800, 1400, 2500, 3200] },
+    whirlpool: { count:      [4,   7,    14,   21] },
+  };
+
+  /* ─── Color palettes ────────────────────────────────
+     Colorblind-safe palette based on Wong (2011).
+     Reference: https://davidmathlogic.com/colorblind   */
+  const PALETTE = {
+    normal: {
+      player:    '#ff0000',
+      blue:      '#0000ff',
+      magenta:   '#e040fb',
+      green:     '#00ff00',
+      black:     '#1a1a1a',
+      upgrade:   '#ff8000',
+      rotation:  '#888888',
+      shuriken:  '#FFD600',
+      lightning: '#FFD600',
+      bomb:      '#FFD600',
+      boomerang: '#FFD600',
+      laser:     '#FFD600',
+      whirlpool: '#FFD600',
+      mushroom:  '#888888',
+      switch:    '#888888',
+    },
+    colorblind: {
+      player:    '#e8192c',
+      blue:      '#785ef0',
+      magenta:   '#e040fb',
+      green:     '#56b4e9',
+      black:     '#000000',
+      upgrade:   '#d55e00',
+      rotation:  '#888888',
+      shuriken:  '#f0e442',
+      lightning: '#f0e442',
+      bomb:      '#f0e442',
+      boomerang: '#f0e442',
+      laser:     '#f0e442',
+      whirlpool: '#f0e442',
+      mushroom:  '#888888',
+      switch:    '#888888',
+    },
+  };
+
+  let colorblind = false;
+  let darkMode   = false;
+
+  function applyDark(col) {
+    if (!darkMode) return col;
+    const c = col.toLowerCase().replace(/\s/g, '');
+    if (c === '#1a1a1a' || c === '#000000' || c === '#111' || c === '#111111') return '#e8e8e8';
+    if (c === '#e8e8e8') return '#111111';
+    return col;
+  }
+
+  function getColor(type) {
+    const base = (colorblind ? PALETTE.colorblind : PALETTE.normal)[type];
+    return applyDark(base);
+  }
+
+  /* ─── Square definitions ─────────────────────────────
+     Each entry: { size, color is set at spawn via getColor(), negative?, frequency(t), legend? }
+     t = level progression 0..1                        */
+  const SQUARES = {
+    blue:      { size: 1.0, frequency: t => 60 - 10 * t,  legend: 'GROW'    },
+    green:     { size: 0.8, frequency: () => 10,           legend: 'SHRINK'  },
+    magenta:   { size: 0.5, frequency: () => 0.1,          legend: 'BOOST'   },
+    upgrade:   { size: 1.0, frequency: () => Object.values(tiers).every(v => v >= 4) ? 0 : 1, legend: 'UPGRADE' },
+    shuriken:  { size: 1.0, frequency: () => 3,            legend: 'BUFF'    },
+    lightning: { size: 1.0, frequency: () => 1.0                             },
+    bomb:      { size: 1.0, frequency: () => 1.0                             },
+    boomerang: { size: 1.0, frequency: () => 1.0                             },
+    laser:     { size: 1.0, frequency: () => 1.0                             },
+    whirlpool: { size: 1.0, frequency: () => 1.0                             },
+    mushroom:  { size: 1.0, frequency: t => 1 + 4 * t,    negative: true, legend: 'NERF' },
+    rotation:  { size: 1.0, frequency: t => 1 + 9 * t,    negative: true    },
+    switch:    { size: 1.0, frequency: t => 1 + 4 * t,    negative: true    },
+    black:     { size: 1.2, frequency: t => 20 + 40 * t,   legend: 'DEATH'   },
+  };
+
+  // Derived helpers — single source of truth
+  const NEGATIVE_TYPES = new Set(Object.entries(SQUARES).filter(([,v]) => v.negative).map(([k]) => k));
+
+  function pickSquareType(level) {
+    const t       = Math.min(1, Math.max(0, (level - 1) / 12));
+    const entries = Object.entries(SQUARES);
+    const total   = entries.reduce((sum, [, cfg]) => sum + cfg.frequency(t), 0);
+    let r = Math.random() * total;
+    for (const [type, cfg] of entries) { r -= cfg.frequency(t); if (r <= 0) return type; }
+    return 'blue';
+  }
+
+  function buildLegend() {
+    const el = document.getElementById('legend');
+    if (!el) return;
+    const playerItem = '<div class="leg-item"><div class="leg-sq" style="background:' + getColor('player') + '"></div><span class="leg-label">PLAYER</span></div>';
+    el.innerHTML = playerItem + Object.entries(SQUARES)
+      .filter(([, cfg]) => cfg.legend)
+      .map(([type, cfg]) => {
+        const color = getColor(type);
+        const style = 'background:' + color + (type === 'blue' ? ';outline:1px solid rgba(0,0,255,0.3)' : '');
+        return '<div class="leg-item"><div class="leg-sq" style="' + style + '"></div><span class="leg-label">' + cfg.legend + '</span></div>';
+      }).join('');
+  }
+  buildLegend();
+
+  /* ─── SVG icon images ────────────────────────────────
+     Icons sourced from https://game-icons.net/           */
+  function makeSVGImg(pathD, color = '#000') {
+    const img = new Image();
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="${pathD}" fill="${color}"/></svg>`;
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    return img;
+  }
+
+  const SVG_PATHS = {
+    shuriken:  { d: 'M357.1 347.1c-8.5 1.9-17 2.4-24.3.3-20.6-6.7-31.6-29.4-24.7-50.8 7-21.4 29.3-33.4 49.8-26.7 4.9 1.6 12.2 7.8 19.6 16.5 44.8-32.8 78.4-57.2 115.8-83.7l-142.9 1.7c1.8 5.1-3.1 20.2-5.9 24.2-12.9 17.3-38 20.5-56 7.1-18.1-13.3-22.3-38.3-9.5-55.6 3.1-4.2 11.6-9 22-13.4-18.3-56.5-31.5-96.13-45-136.38-13.9 45.5-28.8 90.98-42.5 136.38 5.7 2.3 16.4 8.6 20.1 13.4 12.7 17.4 8.2 42.3-9.9 55.6-18.2 13.2-43.3 9.8-56-7.7-3-4.2-5-13.7-6.2-24.9-60.7.3-97.14.1-142.79-.4l116.59 82.6c2.4-4.9 14-13.8 18.9-15.5 20.6-6.6 42.9 5.4 49.7 26.9 6.8 21.4-4.3 44.1-24.9 50.7-4.9 1.5-14.6.4-25.5-2-20.2 62.5-30 94.2-44.2 136.3l114.6-85.4c-3.7-3.7-8.7-17.6-8.8-22.7.1-21.6 18.4-39.1 40.9-39 22.5 0 40.7 17.6 40.6 39.2 0 5.2-3.6 13.9-9.7 23.7 35.6 25.3 79.6 57.2 115.7 84.2-15.4-44.8-30-89.8-45.5-134.6zM256 296.6c-11.9 0-21.6-9.7-21.6-21.6 0-12 9.7-21.7 21.6-21.7 11.9 0 21.6 9.7 21.6 21.7 0 11.9-9.6 21.6-21.6 21.6z' },
+    lightning: { d: 'M42.656 14.72C98.922 34.014 131.682 87.8 93.53 124.97c97.99 81.427 90.47 108.772 11.564 218.06 39.676 27.97 76.053 100.33 70.344 147.91H230.5c-32.26-22.573-43.393-49.275-48.563-74.72 29.67-3.367 57.124-.784 80.282 9.126 3.604 25.136 3.95 49.578 1.28 65.594h18.97c2.28-15.12 2.576-33.896.717-53.688 16.71 12.26 29.993 29.893 38.657 53.688h34.062c-30.534-30.354-48.743-63.438-64.562-97.063a274.377 274.377 0 0 1-14.813 3.22c-3.77-15.606-8.914-30.76-15.56-44.19 14.544-19.12 21.514-36.89 20.874-54.53-.274-7.538-1.884-14.82-4.53-22.03 22.188-6.712 41.265-11.494 60.998-13.564 4.242 21.135 9.946 42.103 17.625 62.783l2.063 5.562 5.906.5c22.146 1.85 41.883 4.926 60.875 9.625 3.94 39.93-6.698 78.297-30.092 118.938 14.673 9.527 26.153 19.857 35.375 30.75h24.406c-40.497-24.248-32.673-75.68-8.22-102.375 21.968 11.687 36.194 23.99 47.844 41.5v-36.125c-26.635-3.933-42.61-21.916-51.22-47.657 16.828 5.22 33.48 11.873 51.157 20.283v-20.625c-19.077-8.64-37.455-15.373-56.31-20.532-4.706-27.01-3.845-59.278.03-91.875-28.84 7.984-57.094 11.11-83.906 10.157-4.173-24.797-6.5-49.993-7.75-75.5l-.656-13.156-12.22 4.97c-54.128 22.015-119.117 16.334-156.156-10.03C153.216 110.84 147.39 63.24 168 14.72H42.656zm285.531 167.03c1.283 20.255 3.302 40.46 6.47 60.53-52.267-5.78-97.91-27.234-130.063-58.186 37.293 11.99 82.246 11.504 123.594-2.344zm-121.53 50.094c13.693 7.486 27.002 14.627 38.374 24.47 11.47 16.32 17.658 29.84 18.126 42.748.49 13.534-4.895 27.892-20.437 46.875l-3.97 4.875 3 5.532c6.7 12.27 11.89 27.51 15.688 43.594-98.4 10.34-144.816-53.688-50.782-168.094zm152.78 29.812c12.68-.05 26.115 1.008 41.157 3.375 10.154 19.476 17.11 38.17 21.062 56.408-15.91-3.556-32.366-6.114-50.062-7.813-6.03-17.068-10.72-34.386-14.375-51.938.738-.01 1.474-.028 2.217-.03z' },
+    bomb:      { d: 'M259.438 19.22 178.78 88.97l-76.968-46 9 88.75-88.687 28.655 92.688 41.563L73.22 325.125 159 254.03l16 95.282 31.688-49.906 13.218 13.22c-4.34 13.284-6.97 27.36-6.97 42.25 0 76.383 61.788 138.78 138.22 138.78s138.78-62.35 138.78-138.78c.002-76.433-62.396-138.22-138.78-138.22-15.74 0-30.88 2.604-45.094 7.47l-6.562-6.564 66.28-26.375-88.124-26.593 73.688-64.72-108.5 7.595 16.594-88.25zM17.468 71.124l21.376 31.125 35.843 3-22.5-32.938-34.718-1.187zm406.626 18-74 45.313 66.437-8.063 30.22-16.094-22.656-21.155zM171.75 150.188l18.594 1.75c-2.333 24.63 5.19 32.13 18.47 43.718 10.173 8.88 24.053 18.958 35.78 36.156l21.375-21.375 31 31 4.342 4.344 5.72-2.25c12.48-4.95 26-7.704 40.28-8.124-6.82 2.938-13.057 7.058-18.437 12.438-13.18 13.18-18.907 31.506-17.72 51l38.158 4.687-1.813-48.217 37.938 40 45.343-22.75-12.03 47.78 45.656 17.97-53.5 19.906 7.375 40.03c16.53-.598 31.784-6.44 43.19-17.844a58.48 58.48 0 0 0 8.967-11.53c-6.942 59.702-57.724 106.093-119.28 106.093-66.293 0-119.532-53.754-119.532-120.095 0-14.646 2.8-28.405 7.688-41.53l2.093-5.626-4.22-4.25-32.124-32.126 26.063-26.063c-10.157-16.3-22.694-25.145-34.594-35.53-14.54-12.69-27.603-29.76-24.78-59.563zM85.062 224 35.22 242.53l-12.157 32.157 37.624-8.03L85.064 224zm63.407 107.688L122.905 398.5l15.344 32.563 17.25-35.97-7.03-63.406z' },
+    mushroom:  { d: 'M242.875 25.594c-46.25.117-92.147 12.63-130.375 39.75C68.81 96.34 35.56 146.5 23.625 217c-3.752 22.16 1.91 41.663 14.344 56.47 12.43 14.804 30.868 25.155 52.624 32.78 43.51 15.25 101.268 19.72 157.344 19.72 56.395 0 116.863-7.428 163.218-24 23.178-8.288 42.93-18.84 56.875-32.72 11.43-11.375 18.665-25.59 19.47-41.344h1.094l-1.438-10.594c-15.005-112.175-118.867-183.277-224.47-191-6.6-.482-13.204-.735-19.81-.718zm.063 18.687c6.123-.014 12.238.21 18.375.657 3.214.236 6.418.547 9.625.907-25.16 19.974 10.362 61.325 47.375 54.312 26.565-5.036 32.874-19.8 27.812-33.844 62.617 27.994 112.41 81.343 122.344 152.407l.155 1.06c1.887 14.112-2.827 25.35-13.78 36.25-2.64 2.627-5.673 5.182-9.033 7.658 3.986-14.92-.91-32.102-21.375-45.344-40.378-26.132-96.414 37.186-41.843 72.5.154.1.313.183.47.28-40.09 10.845-89.146 16.157-135.127 16.157-26.117 0-52.553-1.105-77.375-3.717 17.746-9.192 27.433-34.97 1.5-51.75-26.975-17.458-63.925 21.993-34.312 47.187-14.918-2.678-28.762-6.086-41-10.375-8.628-3.024-16.41-6.468-23.22-10.313 15.15-7.296 23.773-29.15 1.94-43.28-11.807-7.64-25.924-2.13-33 7.843-1.682-6.65-1.873-14.094-.407-22.75 3.89-22.972 10.086-43.39 18.156-61.438 2.32 19.157 15.042 34.623 35.56 31.094 62.195-10.696 55.24-98.255 9.22-90.343-1.82.314-3.578.685-5.28 1.126a182.124 182.124 0 0 1 23.593-19.97c12.744-9.04 26.488-16.332 40.906-21.937-.934 7.07 2.093 14.8 11.53 20.907 18.86 12.203 44.305-13.4 28.063-31.876 12.84-2.25 25.943-3.372 39.125-3.406zm-51.844 54.407c-4.59.115-9.263 1.438-13.656 4.282-38.004 24.593 1.004 68.694 29.125 50.5 32.066-20.753 9.32-55.4-15.47-54.782zm191.72 31.594c-24.964.418-21.014 38.305 2.81 45.564 36.154 11.015 34.472-35.725 7.72-43.875-3.954-1.206-7.466-1.74-10.53-1.69zm-116.845 27.626c-9.463.237-19.07 2.983-28.126 8.844-78.328 50.685 2.105 141.54 60.062 104.03 66.09-42.764 19.156-114.15-31.937-112.874zM335 338.594c-55.842 7.335-113.248 7.307-167.406 2.156-21.82 91.642-38.78 153.125 82.687 153.125 129.88 0 110.022-66.537 84.72-155.28z' },
+    boomerang: { d: 'M444.824 74.726C413.17 41.73 286.208 42.686 184.298 60.023l6.463 70.695c59.96-4.478 124.03-3.225 160.113 33.527 34.967 37.816 33.125 101.87 25.757 161.544l70.3 9.868c22.24-100.955 29.322-227.723-2.106-260.932zM164.077 63.752a662.155 662.155 0 0 0-16.186 3.42l6.106 66.803c5.36-.526 10.806-1.05 16.332-1.56l-6.25-68.663zM442.23 355.675l-68.283-9.56c-.776 5.496-1.562 10.91-2.346 16.24l66.43 9.322a653.11 653.11 0 0 0 4.2-16.002zM127.81 72.07c-48.305 12.787-81.697 29.542-79.757 47.244 2.445 22.298 38.3 21.037 85.574 16.623L127.81 72.07zM432.17 391.5l-63.512-8.896c-6.69 47.005-9.682 82.76 12.472 86.277 17.588 2.794 35.935-29.75 51.04-77.38z' },
+    switch:    { d: 'M252.314 19.957c-72.036.363-142.99 33.534-189.18 95.97-69.83 94.39-59.125 223.32 19.85 304.993l-37.238 50.332 151.22-22.613L174.35 297.42l-43.137 58.308c-44.08-54.382-47.723-133.646-4.16-192.53 30.676-41.466 77.863-63.504 125.758-63.753a156.808 156.808 0 0 1 48.645 7.467l-6.963-46.55a191.054 191.054 0 0 0-71.017-.997c-59.232 7.322-113.994 39.918-148.157 91.215 35.65-65.89 103.774-105.918 176.043-107.744a204.322 204.322 0 0 1 49.62 4.84l48.608-7.268c-31.14-13.906-64.32-20.62-97.274-20.453zm212.93 22.055-151.217 22.61 22.614 151.22 41.126-55.588c42.204 54.29 45.092 132.048 2.187 190.043-40.22 54.367-108.82 75.32-170.19 57.566l6.522 43.598a192.699 192.699 0 0 0 86.203-3.07c37.448-5.957 73.34-22.05 103.16-47.728-49.196 54.65-122.615 77.514-191.744 64.34l-55.8 8.344c99.03 43.7 218.402 14.77 285.51-75.938 69.13-93.445 59.34-220.743-17.483-302.53l39.114-52.866z' },
+    rotation:  { d: 'M263.09 50a205.803 205.803 0 0 0-35.857 3.13C142.026 68.156 75.156 135.026 60.13 220.233 45.108 305.44 85.075 391.15 160.005 434.41c32.782 18.927 69.254 27.996 105.463 27.553 46.555-.57 92.675-16.865 129.957-48.15l-30.855-36.768a157.846 157.846 0 0 1-180.566 15.797 157.846 157.846 0 0 1-76.603-164.274A157.848 157.848 0 0 1 235.571 100.4a157.84 157.84 0 0 1 139.17 43.862L327 192h128V64l-46.34 46.342C370.242 71.962 317.83 50.03 263.09 50z' },
+    upgrade:   { d: 'm256 29.816-231 154v106.368l231-154 231 154V183.816zm0 128.043L105 259.783v90.283l151-101.925 151 101.925v-90.283zm0 112-87 58.725v67.6l87-58 87 58v-67.6zm0 89.957-87 58v64.368l87-58 87 58v-64.368z' },
+    laser:     { d: 'm291.17 299.252 109.093 150.173-21.76 15.786-109.07-150.16v72.135h-26.865V315.05l-109.07 150.16-21.74-15.795 109.07-150.163-68.6 22.287-8.307-25.555 68.602-22.287L36 216.348l8.307-25.565 176.533 57.362-42.404-58.36 21.686-15.776 42.446 58.36V46.79h26.864v185.58l42.446-58.36 21.74 15.795-42.404 58.36 176.48-57.382L476 216.337 299.467 273.71l68.602 22.286-8.308 25.554z' },
+    whirlpool: { d: 'm286.077 121.043 45.124-103.484-93.427 69.007-.392-.282-.062.616-105.5 77.925-83.85-76.773 35.532 112.459-.114.082.162.071 39.185 124.029-98.881 60.209 249.358-5.869L298.8 494.441l75.664-240.184 113.682 10.997zm-46.453 177.914c-32.097 0-58.115-26.019-58.115-58.114 0-32.098 26.018-58.115 58.115-58.115s58.114 26.017 58.114 58.115c0 32.096-26.017 58.114-58.114 58.114z' },
+  };
+
+  let ICON_MAP = {};
+  function buildIcons() {
+    Object.entries(SVG_PATHS).forEach(([key, { d }]) => {
+      ICON_MAP[key] = makeSVGImg(d, '#000');
+    });
+  }
+  buildIcons();
+
+  /* ─── State ──────────────────────────────────────── */
+  let state         = 'menu';
+  let squares       = [];
+  let shurikenProjectiles = [];
+  let boomerangs    = [];
+  let bolts         = [];
+  let bombRings     = [];
+  let deathRings    = [];
+  let laserBeams    = [];
+  let whirlpoolProjectiles = [];
+  let invertTimer   = 0;    // ms remaining (mushroom)
+  let frozen = { squares: [], redX: 0, redY: 0, redSize: 0 };
+
+  /* Upgrade tiers */
+  const tiers = { shuriken: 1, lightning: 1, bomb: 1, boomerang: 1, laser: 1, whirlpool: 1 };
+  let mouseX        = 0;
+  let mouseY        = 0;
+  let redX          = 0;   // effective red square position (may lag behind mouse on resume)
+  let redY          = 0;
+  let catchingUp    = false;
+  let catchUpVX     = 0;
+  let catchUpVY     = 0;
+  let lastMouseX    = 0;
+  let lastMouseY    = 0;
+  let playerDirAngle = 0; // smoothed angle from recent movement history
+  const PLAYER_HIST_LEN = 12;
+  const playerPosHistory = []; // {x, y} ring of recent positions
+  let points        = 0;
+  let redSize       = RED_DEFAULT;
+  let maxRedSize    = RED_DEFAULT;
+  let direction     = 0;
+  let speedBoostMs  = 0;
+  let chaosSpawnMs  = 0;
+  let spawnAccum    = 0;
+  let startTime     = 0;
+  let pausedAt      = 0;
+  let pausedElapsed = 0;
+  let growFlash     = 0;
+  let deathFlash    = 0;
+  let redSlinkySeed = Math.random() * 100;
+
+  const TICK_MS    = 1000 / 60;
+  let   logicAccum = 0;
+  let   lastFrameTs = 0;
+
+  /* Level */
+  function getLevel() {
+    if (points < 1) return 1;
+    return Math.max(1, 2 + Math.log(points / INITIAL_VAL) / Math.log(GROWTH_FAC));
+  }
+
+
+  /* Spawn — speeds in px/tick @60fps, tripled */
+  function spawnSquare(level) {
+    const type  = pickSquareType(level);
+    const cfg   = SQUARES[type];
+    const size  = BASE_UNIT * cfg.size;
+    const spd   = (1.6 + level * 0.22) * 3 / cfg.size;
+    let x, y, vx, vy;
+    if (chaosSpawnMs > 0) {
+      const angle = Math.random() * Math.PI * 2;
+      const edge  = Math.floor(Math.random() * 4);
+      switch (edge) {
+        case 0: x = Math.random() * W; y = -size;    break;
+        case 1: x = W + size;          y = Math.random() * H; break;
+        case 2: x = Math.random() * W; y = H + size; break;
+        case 3: x = -size;             y = Math.random() * H; break;
+      }
+      vx = Math.cos(angle) * spd; vy = Math.sin(angle) * spd;
+    } else {
+      switch (direction) {
+        case 0: x = Math.random() * W; y = -size;     vx = 0;    vy = spd;  break;
+        case 1: x = W + size;          y = Math.random() * H; vx = -spd; vy = 0; break;
+        case 2: x = Math.random() * W; y = H + size;  vx = 0;    vy = -spd; break;
+        case 3: x = -size;             y = Math.random() * H; vx = spd;  vy = 0; break;
+      }
+    }
+    squares.push({ x, y, vx, vy, size, type, color: getColor(type), slinkySeed: Math.random() * 100 });
+  }
+
+  /* AABB */
+  function intersects(ax, ay, as, bx, by, bs) {
+    const half = (as + bs) * 0.5;
+    return Math.abs(ax - bx) < half && Math.abs(ay - by) < half;
+  }
+
+  /* Effects */
+  function applyEffect(type, ox = redX, oy = redY) {
+    switch (type) {
+      case 'blue':
+        points += 10; redSize += 5; growFlash = Date.now() + 120; break;
+      case 'magenta':
+        points += 10; redSize += 50;
+        speedBoostMs = 6000; chaosSpawnMs = 6000;
+        growFlash = Date.now() + 400;
+        statusLabels.push({ label: 'BOOST', col: getColor('magenta'), expiresAt: Date.now() + 3000, spawnedAt: Date.now() }); break;
+      case 'green':   redSize = RED_DEFAULT; break;
+      case 'black':   triggerGameOver(); return;
+      case 'rotation': direction = (direction + 1) % 4; break;
+      case 'shuriken':  launchShuriken(ox, oy);  break;
+      case 'lightning': launchLightning(ox, oy); break;
+      case 'bomb':      triggerBomb(ox, oy);     break;
+      case 'mushroom':  invertTimer = 5000; break;
+      case 'switch':    triggerSwitch(); break;
+      case 'upgrade':   triggerUpgrade(); break;
+      case 'boomerang': launchBoomerangs(ox, oy); break;
+      case 'laser':     launchLaser();           break;
+      case 'whirlpool': launchWhirlpool(ox, oy); break;
+    }
+    redSize = Math.min(redSize, Math.min(W, H) * 0.40);
+    if (redSize > maxRedSize) maxRedSize = redSize;
+  }
+
+  /* Universal hit handler */
+  function applyHit(type, ox, oy) {
+    if (type === 'black' || NEGATIVE_TYPES.has(type)) return; // silently removed
+    queueEffect(type, ox, oy);
+    drainEffects();
+  }
+
+  function launchShuriken(ox, oy) {
+    const spd   = 30 + tiers.shuriken * 3;
+    const size  = BASE_UNIT * SQUARES.shuriken.size;
+    const count = TIER_CFG.shuriken.count[tiers.shuriken - 1];
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      shurikenProjectiles.push({
+        x: ox, y: oy, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd,
+        size, rot: angle, rotSpd: 0.18 * 3, lifeMs: 3000,
+      });
+    }
+  }
+
+  function launchWhirlpool(ox, oy) {
+    const spd   = 28 + tiers.whirlpool * 3;
+    const size  = BASE_UNIT * SQUARES.whirlpool.size;
+    const count = TIER_CFG.whirlpool.count[tiers.whirlpool - 1];
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      whirlpoolProjectiles.push({
+        x: ox, y: oy, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd,
+        size, rot: angle, rotSpd: 0.25, lifeMs: 2800, curve: 0.04,
+      });
+    }
+  }
+
+  function launchBoomerangs(ox, oy) {
+    const spd       = 24 + tiers.boomerang * 2;
+    const size      = BASE_UNIT * SQUARES.boomerang.size;
+    const t         = tiers.boomerang - 1;
+    const count     = TIER_CFG.boomerang.count[t];
+    const maxBounce = TIER_CFG.boomerang.maxBounce[t];
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      const curve = (i % 2 === 0 ? 1 : -1) * 0.01;
+      boomerangs.push({
+        x: ox, y: oy, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd,
+        size, rot: angle, bounces: 0, maxBounce, curve,
+      });
+    }
+  }
+
+  /* Launch laser beam — origin tracks red square, angle tracks player movement */
+  function launchLaser() {
+    const t   = tiers.laser - 1;
+    const cfg = TIER_CFG.laser;
+    const diag = Math.sqrt(W * W + H * H);
+    laserBeams.push({
+      length:      diag * cfg.length[t],
+      width:       cfg.width[t] * SCALE,
+      durationMs:  cfg.durationMs[t],
+      maxDurationMs: cfg.durationMs[t],
+    });
+  }
+  function launchLightning(ox, oy) {
+    const count = TIER_CFG.lightning.count[tiers.lightning - 1];
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
+      bolts.push({ x: ox, y: oy, angle, path: [{ x: ox, y: oy }], lifeMs: 3667 });
+    }
+  }
+
+  /* Switch: shuffle types among all visible squares */
+  function triggerSwitch() {
+    if (squares.length < 2) return;
+    const types = squares.map(sq => sq.type);
+    // Fisher-Yates shuffle
+    for (let i = types.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [types[i], types[j]] = [types[j], types[i]];
+    }
+    squares.forEach((sq, i) => {
+      sq.type  = types[i];
+      sq.color = getColor(sq.type);
+    });
+  }
+
+  /* Upgrade: randomly bump one tier that isn't maxed, show toast */
+  function triggerUpgrade() {
+    const upgradeable = Object.keys(tiers).filter(k => tiers[k] < 4);
+    if (upgradeable.length === 0) return;
+    const key = upgradeable[Math.floor(Math.random() * upgradeable.length)];
+    tiers[key]++;
+    statusLabels.push({ label: `${key.toUpperCase()}  ›  TIER ${tiers[key]}`, col: getColor('upgrade'), expiresAt: Date.now() + 3000, spawnedAt: Date.now() });
+  }
+
+  let statusLabels = [];
+  let lastLevel     = 1;
+
+  /* Effect queue */
+  let effectQueue     = [];
+  let drainingEffects = false;
+
+  function queueEffect(type, ox, oy) { effectQueue.push({ type, ox, oy }); }
+
+  function drainEffects() {
+    if (drainingEffects) return;
+    drainingEffects = true;
+    while (effectQueue.length > 0) {
+      const { type, ox, oy } = effectQueue.shift();
+      applyEffect(type, ox, oy);
+    }
+    drainingEffects = false;
+  }
+
+  /* Bomb */
+  function triggerBomb(ox, oy) {
+    const mult       = TIER_CFG.bomb.radiusMult[tiers.bomb - 1];
+    const bombRadius = redSize * mult;
+    bombRings.push({ x: ox, y: oy, r: 0, lifeMs: 600, maxLifeMs: 600, radius: bombRadius });
+    const removed = [];
+    squares = squares.filter(sq => {
+      const dx = sq.x - ox, dy = sq.y - oy;
+      if (Math.sqrt(dx * dx + dy * dy) <= bombRadius) { removed.push(sq); return false; }
+      return true;
+    });
+    for (const sq of removed) if (sq.type !== 'black' && !NEGATIVE_TYPES.has(sq.type)) queueEffect(sq.type, sq.x, sq.y);
+    drainEffects();
+  }
+
+  /* Elapsed */
+  function getElapsed() { return Date.now() - startTime - pausedElapsed; }
+
+  function snapshotFreeze() {
+    frozen = { squares: squares.map(sq => ({ ...sq })), redX: redX, redY: redY, redSize };
+    document.body.classList.remove('playing');
+  }
+
+  function showOverlay(title, btnLabel, btnId, btnCb) {
+    const elapsed = getElapsed(), secs = Math.floor(elapsed / 1000);
+    const mins = Math.floor(secs / 60), ss = String(secs % 60).padStart(2, '0');
+    const sizeStr = (maxRedSize / RED_DEFAULT).toFixed(1) + 'x';
+    overlay.innerHTML = `
+      <div class="ov-title-wrap"><canvas id="slinky-canvas"></canvas><div class="ov-title" id="ov-title" style="font-size:clamp(36px,6vw,72px)">${title}</div></div>
+      <div class="ov-score"><span class="pts">${points.toLocaleString()}</span><span class="pts-label">POINTS</span></div>
+      <div class="ov-stats">LEVEL ${Math.max(1,Math.floor(getLevel()))} &nbsp;&middot;&nbsp; MAX SIZE ${sizeStr} &nbsp;&middot;&nbsp; ${mins}:${ss}</div>
+      <div class="btn-group"><button class="btn-primary" id="${btnId}">${btnLabel}</button><button class="btn-secondary" id="exit-btn">EXIT TO MENU</button></div>`;
+    overlay.classList.remove('hidden');
+    document.getElementById(btnId).addEventListener('click', btnCb);
+    document.getElementById('exit-btn').addEventListener('click', goToMenu);
+    initSlinky(title);
+  }
+
+  /* Return to start screen */
+  function goToMenu() {
+    state = 'menu';
+    squares = []; shurikenProjectiles = []; boomerangs = []; bolts = []; bombRings = [];
+    invertTimer = 0;
+    document.body.classList.remove('playing');
+    // Restore the start-screen overlay
+    overlay.innerHTML = `
+      <div class="ov-title-wrap">
+        <canvas id="slinky-canvas"></canvas>
+        <div class="ov-title" id="ov-title">SQUAREZ</div>
+      </div>
+      <div class="ov-sub">Think Inside the Box.</div>
+      <div id="legend"></div>
+      <div class="btn-group">
+        <button class="btn-primary" id="start-btn">START GAME</button>
+        <button class="btn-secondary" id="dark-toggle-btn"></button>
+        <button class="btn-secondary" id="cb-toggle-btn"></button>
+        <button class="btn-secondary" id="install-btn" style="display:none">INSTALL APP</button>
+      </div>
+      <div class="keyboard-hints" style="margin-top:14px;font-size:10px;color:#aaa;letter-spacing:0.2em">ESC — PAUSE &nbsp;·&nbsp; TAB — COLORBLIND</div>`;
+    overlay.classList.remove('hidden');
+    hud.style.display = 'none';
+    document.getElementById('start-btn').addEventListener('click', startGame);
+    buildLegend();
+    wireInstallBtn();
+    wireDarkToggle();
+    wireCbToggle();
+    // Restart slinky canvas animation
+    initSlinky();
+  }
+
+  /* Pause */
+  function pauseGame(silent = false) {
+    state    = 'paused';
+    pausedAt = Date.now();
+    snapshotFreeze();
+    if (!silent) {
+      const elapsed = getElapsed(), secs = Math.floor(elapsed / 1000);
+      const mins = Math.floor(secs / 60), ss = String(secs % 60).padStart(2, '0');
+      const sizeStr = (maxRedSize / RED_DEFAULT).toFixed(1) + 'x';
+      overlay.innerHTML = `
+        <div class="ov-title-wrap"><canvas id="slinky-canvas"></canvas><div class="ov-title" id="ov-title" style="font-size:clamp(36px,6vw,72px)">PAUSED</div></div>
+        <div class="ov-score"><span class="pts">${points.toLocaleString()}</span><span class="pts-label">POINTS</span></div>
+        <div class="ov-stats">LEVEL ${Math.max(1,Math.floor(getLevel()))} &nbsp;&middot;&nbsp; MAX SIZE ${sizeStr} &nbsp;&middot;&nbsp; ${mins}:${ss}</div>
+        <div class="btn-group">
+          <button class="btn-primary" id="resume-btn">RESUME</button>
+          <button class="btn-secondary" id="dark-toggle-btn"></button>
+          <button class="btn-secondary" id="cb-toggle-btn"></button>
+          <button class="btn-secondary" id="exit-btn">EXIT TO MENU</button>
+        </div>`;
+      overlay.classList.remove('hidden');
+      document.getElementById('resume-btn').addEventListener('click', resumeGame);
+      document.getElementById('exit-btn').addEventListener('click', goToMenu);
+      wireDarkToggle();
+      wireCbToggle();
+      initSlinky('PAUSED');
+    }
+  }
+
+  function resumeGame() {
+    pausedElapsed += Date.now() - pausedAt;
+    state = 'playing';
+    document.body.classList.add('playing');
+    overlay.classList.add('hidden');
+    catchingUp = true;
+    catchUpVX  = 0;
+    catchUpVY  = 0;
+    // redX/redY remain at the frozen pause position
+  }
+
+  /* Game over */
+  function triggerGameOver() {
+    state = 'gameover'; deathFlash = 300;
+    snapshotFreeze();
+    showOverlay('GAME OVER', 'PLAY AGAIN', 'restart-btn', startGame);
+  }
+
+  /* Fixed logic tick (dt = TICK_MS always) */
+  function tick(dt) {
+    if (state !== 'playing') return;
+
+    if (deathFlash > 0) deathFlash = Math.max(0, deathFlash - dt);
+
+    /* Red square position — spring catch-up on resume */
+    const prevRedX = redX, prevRedY = redY;
+    if (catchingUp) {
+      catchUpVX += (mouseX - redX) * 0.015;
+      catchUpVY += (mouseY - redY) * 0.015;
+      catchUpVX *= 0.88; catchUpVY *= 0.88;
+      redX += catchUpVX; redY += catchUpVY;
+      const dx = mouseX - redX, dy = mouseY - redY;
+      if (dx * dx + dy * dy < BASE_UNIT * BASE_UNIT * 0.25) { redX = mouseX; redY = mouseY; catchingUp = false; }
+    } else {
+      redX = mouseX; redY = mouseY;
+    }
+
+    const sm = speedBoostMs > 0 ? 1.5 : 1.0;
+    if (speedBoostMs > 0) speedBoostMs -= dt;
+    if (chaosSpawnMs > 0) chaosSpawnMs -= dt;
+
+    /* Spawn */
+    const level      = getLevel();
+    const intervalMs = Math.max(50, (10 - level * 0.5) * TICK_MS / SCALE);
+    spawnAccum += dt;
+    while (spawnAccum >= intervalMs) {
+      spawnAccum -= intervalMs;
+      spawnSquare(level);
+      if (level > 6  && Math.random() < 0.28) spawnSquare();
+      if (level > 12 && Math.random() < 0.15) spawnSquare();
+    }
+
+    /* Level-up label */
+    const floorLevel = Math.max(1, Math.floor(level));
+    if (floorLevel > lastLevel) {
+      lastLevel = floorLevel;
+      statusLabels.push({ label: `LEVEL  ${floorLevel}`, col: getColor('player'), expiresAt: Date.now() + 3000, spawnedAt: Date.now() });
+    }
+
+    /* Movement scale: px-per-tick * speed-mult */
+    const move = sm * dt / TICK_MS;
+
+    /* Squares — swept collision along red square's movement this tick */
+    const segDX = redX - prevRedX, segDY = redY - prevRedY;
+    const segLen = Math.sqrt(segDX * segDX + segDY * segDY);
+    const redHits = [];
+    squares = squares.filter(sq => {
+      sq.x += sq.vx * move; sq.y += sq.vy * move;
+      const m = sq.size * 2;
+      if (sq.x < -m || sq.x > W + m || sq.y < -m || sq.y > H + m) return false;
+      // Find closest point on movement segment to square centre
+      let cx = redX, cy = redY;
+      if (segLen > 0) {
+        const t = Math.max(0, Math.min(1, ((sq.x - prevRedX) * segDX + (sq.y - prevRedY) * segDY) / (segLen * segLen)));
+        cx = prevRedX + t * segDX; cy = prevRedY + t * segDY;
+      }
+      if (!intersects(cx, cy, redSize, sq.x, sq.y, sq.size)) return true;
+      if (sq.type === 'black') {
+        const ix = (cx + sq.x) * 0.5, iy = (cy + sq.y) * 0.5;
+        deathRings.push({ x: ix, y: iy, seed: Math.random() * 100 });
+        redHits.push(sq);
+        return true; // black stays on screen
+      }
+      redHits.push(sq); return false;
+    });
+    for (const sq of redHits) applyEffect(sq.type, sq.x, sq.y);
+
+    if (invertTimer > 0) invertTimer -= dt;
+
+    /* Shuriken projectiles */
+    shurikenProjectiles = shurikenProjectiles.filter(pr => {
+      pr.x += pr.vx * move; pr.y += pr.vy * move;
+      pr.rot += pr.rotSpd * (dt / TICK_MS);
+      pr.lifeMs -= dt;
+      const m = pr.size * 2;
+      if (pr.lifeMs <= 0 || pr.x < -m || pr.x > W + m || pr.y < -m || pr.y > H + m) return false;
+      const prHits = [];
+      squares = squares.filter(sq => {
+        if (intersects(pr.x, pr.y, pr.size, sq.x, sq.y, sq.size)) { prHits.push(sq); return false; }
+        return true;
+      });
+      for (const sq of prHits) applyHit(sq.type, sq.x, sq.y);
+      return true;
+    });
+
+    /* Whirlpool projectiles */
+    whirlpoolProjectiles = whirlpoolProjectiles.filter(wp => {
+      // Apply curve: rotate velocity vector each tick
+      const curveStep = wp.curve * (dt / TICK_MS);
+      const spd = Math.sqrt(wp.vx * wp.vx + wp.vy * wp.vy);
+      const ang = Math.atan2(wp.vy, wp.vx) + curveStep;
+      wp.vx = Math.cos(ang) * spd; wp.vy = Math.sin(ang) * spd;
+      wp.x += wp.vx * move; wp.y += wp.vy * move;
+      wp.rot += wp.rotSpd * (dt / TICK_MS);
+      wp.lifeMs -= dt;
+      const m = wp.size * 2;
+      if (wp.lifeMs <= 0 || wp.x < -m || wp.x > W + m || wp.y < -m || wp.y > H + m) return false;
+      const wpHits = [];
+      squares = squares.filter(sq => {
+        if (intersects(wp.x, wp.y, wp.size, sq.x, sq.y, sq.size)) { wpHits.push(sq); return false; }
+        return true;
+      });
+      for (const sq of wpHits) applyHit(sq.type, sq.x, sq.y);
+      return true;
+    });
+    boomerangs = boomerangs.filter(bm => {
+      bm.x += bm.vx * move; bm.y += bm.vy * move;
+      bm.rot += 0.22 * (dt / TICK_MS);
+      const curveStep = bm.curve * (dt / TICK_MS);
+      const spd = Math.sqrt(bm.vx * bm.vx + bm.vy * bm.vy);
+      const ang = Math.atan2(bm.vy, bm.vx) + curveStep;
+      bm.vx = Math.cos(ang) * spd; bm.vy = Math.sin(ang) * spd;
+      let bounced = false;
+      if (bm.x - bm.size * 0.5 <= 0) { bm.vx =  Math.abs(bm.vx); bounced = true; }
+      if (bm.x + bm.size * 0.5 >= W) { bm.vx = -Math.abs(bm.vx); bounced = true; }
+      if (bm.y - bm.size * 0.5 <= 0) { bm.vy =  Math.abs(bm.vy); bounced = true; }
+      if (bm.y + bm.size * 0.5 >= H) { bm.vy = -Math.abs(bm.vy); bounced = true; }
+      if (!bounced && bm.bounces > 0 && intersects(bm.x, bm.y, bm.size, redX, redY, redSize)) {
+        // reflect off the red square: push away from its center
+        const dx = bm.x - redX, dy = bm.y - redY;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const nx = dx / len, ny = dy / len;
+        const dot = bm.vx * nx + bm.vy * ny;
+        bm.vx -= 2 * dot * nx;
+        bm.vy -= 2 * dot * ny;
+        bounced = true;
+      }
+      if (bounced) { bm.bounces++; if (bm.bounces > bm.maxBounce) return false; }
+      const bmHits = [];
+      squares = squares.filter(sq => {
+        if (intersects(bm.x, bm.y, bm.size, sq.x, sq.y, sq.size)) { bmHits.push(sq); return false; }
+        return true;
+      });
+      for (const sq of bmHits) applyHit(sq.type, sq.x, sq.y);
+      return true;
+    });
+
+    /* Laser beams */
+    laserBeams = laserBeams.filter(lb => {
+      lb.durationMs -= dt;
+      if (lb.durationMs <= 0) return false;
+      const cos = Math.cos(playerDirAngle), sin = Math.sin(playerDirAngle);
+      const laserHits = [];
+      squares = squares.filter(sq => {
+        const dx = sq.x - redX, dy = sq.y - redY;
+        const t  = Math.max(0, Math.min(1, (dx * cos + dy * sin) / lb.length));
+        const cx = redX + t * cos * lb.length, cy = redY + t * sin * lb.length;
+        const dist = Math.sqrt((sq.x - cx) ** 2 + (sq.y - cy) ** 2);
+        if (dist < sq.size * 0.5 + lb.width * 0.5) { laserHits.push(sq); return false; }
+        return true;
+      });
+      for (const sq of laserHits) applyHit(sq.type, sq.x, sq.y);
+      return true;
+    });
+
+    /* Lightning */
+    const STEP = 18, CONE = Math.PI / 5, JUMP = 780;
+    const boltSteps = Math.max(1, Math.round(4 * dt / TICK_MS));
+    for (let s = 0; s < boltSteps; s++) {
+      bolts = bolts.filter(bolt => {
+        bolt.lifeMs -= dt / boltSteps;
+        if (bolt.lifeMs <= 0) return false;
+        let best = null, bestDist = JUMP;
+        for (const sq of squares) {
+          const dx = sq.x - bolt.x, dy = sq.y - bolt.y;
+          const d  = Math.sqrt(dx * dx + dy * dy);
+          if (d >= bestDist) continue;
+          let diff = Math.atan2(dy, dx) - bolt.angle;
+          while (diff >  Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          if (Math.abs(diff) <= CONE) { best = sq; bestDist = d; }
+        }
+        if (best) {
+          bolt.angle = Math.atan2(best.y - bolt.y, best.x - bolt.x);
+          bolt.x = best.x; bolt.y = best.y;
+          const idx = squares.indexOf(best);
+          if (idx >= 0) { squares.splice(idx, 1); applyHit(best.type, best.x, best.y); }
+        } else {
+          bolt.angle += (Math.random() - 0.5) * 0.35;
+          bolt.x += Math.cos(bolt.angle) * STEP;
+          bolt.y += Math.sin(bolt.angle) * STEP;
+        }
+        const perp = bolt.angle + Math.PI / 2;
+        bolt.path.push({ x: bolt.x + Math.cos(perp) * (Math.random() - 0.5) * 28,
+                         y: bolt.y + Math.sin(perp) * (Math.random() - 0.5) * 28 });
+        if (bolt.path.length > 60) bolt.path.shift();
+        if (bolt.x < -60 || bolt.x > W + 60 || bolt.y < -60 || bolt.y > H + 60) return false;
+        return true;
+      });
+    }
+
+    /* Bomb rings */
+    bombRings = bombRings.filter(br => {
+      br.lifeMs -= dt;
+      br.r = br.radius * (1 - br.lifeMs / br.maxLifeMs);
+      return br.lifeMs > 0;
+    });
+
+    /* HUD */
+    const elapsed = getElapsed(), secs = Math.floor(elapsed / 1000);
+    const mins = Math.floor(secs / 60);
+    hudLvl.textContent = Math.max(1, Math.floor(level));
+    hudPts.textContent = points.toLocaleString();
+    hudSze.textContent = (redSize / RED_DEFAULT).toFixed(1) + 'x';
+    hudTim.textContent = `${mins}:${String(secs % 60).padStart(2, '0')}`;
+  }
+
+  /* Draw — called every rAF, uncapped */
+  function draw(now) {
+    ctx.fillStyle = deathFlash > 0 ? `rgba(220,30,30,${(deathFlash / 300) * 0.18})` : applyDark('#e8e8e8');
+    ctx.fillRect(0, 0, W, H);
+
+    if (state === 'menu') return;
+
+    if (state === 'gameover' || state === 'paused') {
+      ctx.save(); ctx.globalAlpha = 1;
+      for (const sq of frozen.squares) {
+        ctx.fillStyle = sq.color;
+        ctx.fillRect(sq.x - sq.size * 0.5, sq.y - sq.size * 0.5, sq.size, sq.size);
+        const icon = ICON_MAP[sq.type];
+        if (icon && icon.complete && icon.naturalWidth > 0) {
+          const pad = sq.size * 0.12;
+          ctx.drawImage(icon, sq.x - sq.size * 0.5 + pad, sq.y - sq.size * 0.5 + pad,
+            sq.size - pad * 2, sq.size - pad * 2);
+        }
+      }
+      const h = frozen.redSize * 0.5;
+      ctx.fillStyle = getColor('player');
+      ctx.fillRect(frozen.redX - h, frozen.redY - h, frozen.redSize, frozen.redSize);
+      // Slinky animated border
+      const colors = getSlinkyColors();
+      const tSec   = now / 1000;
+      const amp    = frozen.redSize * 0.18;
+      for (let l = colors.length - 1; l >= 0; l--) {
+        const osc  = Math.sin(tSec * 3.5 + redSlinkySeed + l * 0.55) * amp;
+        const osc2 = Math.cos(tSec * 1.8 + redSlinkySeed * 0.7 + l * 0.3) * amp * 0.4;
+        ctx.strokeStyle = colors[l];
+        ctx.globalAlpha = 0.18 + 0.07 * (1 - (l + 1) / colors.length);
+        ctx.lineWidth   = 1.5;
+        ctx.strokeRect(frozen.redX - h + osc2, frozen.redY - h + osc, frozen.redSize, frozen.redSize);
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore(); return;
+    }
+
+
+    /* Helper: draw slinky ghost layers behind a square */
+    function drawSlinkySquare(cx, cy, size, seed, tSec) {
+      const colors = getSlinkyColors();
+      const layers = colors.length;
+      const amp    = size * 0.28;
+      for (let l = layers - 1; l >= 0; l--) {
+        ctx.fillStyle   = colors[l];
+        ctx.globalAlpha = 0.12 + 0.05 * (1 - (l + 1) / layers);
+        const osc  = Math.sin(tSec * 3.5 + seed + l * 0.55) * amp;
+        const osc2 = Math.cos(tSec * 1.8 + seed * 0.7 + l * 0.3) * amp * 0.4;
+        const h    = size * 0.5;
+        ctx.fillRect(cx - h + osc2, cy - h + osc, size, size);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    for (const sq of squares) {
+      if (invertTimer > 0) drawSlinkySquare(sq.x, sq.y, sq.size, sq.slinkySeed, now / 1000);
+      ctx.fillStyle = sq.color;
+      ctx.fillRect(sq.x - sq.size * 0.5, sq.y - sq.size * 0.5, sq.size, sq.size);
+      if (NEGATIVE_TYPES.has(sq.type)) {
+        ctx.strokeStyle = darkMode ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(sq.x - sq.size * 0.5 + 0.5, sq.y - sq.size * 0.5 + 0.5, sq.size - 1, sq.size - 1);
+      }
+      const icon = ICON_MAP[sq.type];
+      if (icon && icon.complete && icon.naturalWidth > 0) {
+        const pad = sq.size * 0.12;
+        ctx.drawImage(icon, sq.x - sq.size * 0.5 + pad, sq.y - sq.size * 0.5 + pad,
+          sq.size - pad * 2, sq.size - pad * 2);
+      }
+    }
+
+    for (const pr of shurikenProjectiles) {
+      ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(pr.rot);
+      const h = pr.size * 0.5;
+      ctx.fillStyle = getColor('shuriken'); ctx.fillRect(-h, -h, pr.size, pr.size);
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1;
+      ctx.strokeRect(-h + 0.5, -h + 0.5, pr.size - 1, pr.size - 1);
+      if (ICON_MAP.shuriken.complete && ICON_MAP.shuriken.naturalWidth > 0) {
+        const pad = pr.size * 0.12;
+        ctx.drawImage(ICON_MAP.shuriken, -h + pad, -h + pad, pr.size - pad * 2, pr.size - pad * 2);
+      }
+      ctx.restore();
+    }
+
+    for (const wp of whirlpoolProjectiles) {
+      ctx.save(); ctx.translate(wp.x, wp.y); ctx.rotate(wp.rot);
+      const h = wp.size * 0.5;
+      ctx.fillStyle = getColor('whirlpool'); ctx.fillRect(-h, -h, wp.size, wp.size);
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1;
+      ctx.strokeRect(-h + 0.5, -h + 0.5, wp.size - 1, wp.size - 1);
+      if (ICON_MAP.whirlpool && ICON_MAP.whirlpool.complete && ICON_MAP.whirlpool.naturalWidth > 0) {
+        const pad = wp.size * 0.12;
+        ctx.drawImage(ICON_MAP.whirlpool, -h + pad, -h + pad, wp.size - pad * 2, wp.size - pad * 2);
+      }
+      ctx.restore();
+    }
+
+    for (const bm of boomerangs) {
+      ctx.save(); ctx.translate(bm.x, bm.y); ctx.rotate(bm.rot);
+      const h = bm.size * 0.5;
+      ctx.fillStyle = getColor('boomerang'); ctx.fillRect(-h, -h, bm.size, bm.size);
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1;
+      ctx.strokeRect(-h + 0.5, -h + 0.5, bm.size - 1, bm.size - 1);
+      if (ICON_MAP.boomerang.complete && ICON_MAP.boomerang.naturalWidth > 0) {
+        const pad = bm.size * 0.1;
+        ctx.drawImage(ICON_MAP.boomerang, -h + pad, -h + pad, bm.size - pad * 2, bm.size - pad * 2);
+      }
+      ctx.restore();
+    }
+
+    for (const bolt of bolts) {
+      if (bolt.path.length < 2) continue;
+      const fade = Math.min(1, bolt.lifeMs / 1333);
+      ctx.save();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+      // build path once, reuse for all layers
+      ctx.beginPath();
+      ctx.moveTo(bolt.path[0].x, bolt.path[0].y);
+      for (let i = 1; i < bolt.path.length; i++) ctx.lineTo(bolt.path[i].x, bolt.path[i].y);
+
+      // outer glow — colour follows palette (normal: yellow, colorblind: #f0e442)
+      const boltCol = getColor('lightning');
+      ctx.shadowColor = boltCol; ctx.shadowBlur = 60;
+      ctx.strokeStyle = boltCol + Math.round(fade * 0.4 * 255).toString(16).padStart(2,'0'); ctx.lineWidth = 20; ctx.stroke();
+      ctx.shadowBlur = 20;
+      ctx.strokeStyle = boltCol + Math.round(fade * 0.7 * 255).toString(16).padStart(2,'0'); ctx.lineWidth = 8; ctx.stroke();
+      ctx.shadowBlur = 6;
+      ctx.strokeStyle = boltCol + Math.round(fade * 0.95 * 255).toString(16).padStart(2,'0'); ctx.lineWidth = 3; ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = boltCol + 'ff'; ctx.lineWidth = 1; ctx.stroke();
+
+      ctx.restore();
+    }
+
+    for (const br of bombRings) {
+      const t = 1 - br.lifeMs / br.maxLifeMs, alpha = br.lifeMs / br.maxLifeMs;
+      ctx.save(); ctx.shadowColor = '#ff8800'; ctx.shadowBlur = 22;
+      ctx.beginPath(); ctx.arc(br.x, br.y, br.r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,160,20,${alpha*0.9})`; ctx.lineWidth = 4 + 12 * (1 - t); ctx.stroke();
+      if (t < 0.35) {
+        ctx.beginPath(); ctx.arc(br.x, br.y, br.r * 0.6, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,230,80,${alpha*(0.35-t)/0.35*0.35})`; ctx.fill();
+      }
+      ctx.setLineDash([6, 10]);
+      ctx.beginPath(); ctx.arc(br.x, br.y, br.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,140,0,${alpha*0.3})`; ctx.lineWidth = 1; ctx.stroke();
+      ctx.setLineDash([]); ctx.restore();
+    }
+
+    for (const dr of deathRings) {
+      const tSec   = now / 1000;
+      const colors = getSlinkyColors();
+      const layers = colors.length;
+      const baseRx = 28;
+      const baseRy = 16;
+      ctx.save();
+      ctx.translate(dr.x, dr.y);
+      for (let l = layers - 1; l >= 0; l--) {
+        const layerFrac = (l + 1) / layers;
+        const amp  = 6 + l * 2.5;
+        const oscX = Math.sin(tSec * 4.5 + dr.seed + l * 0.6) * amp;
+        const oscY = Math.cos(tSec * 3.1 + dr.seed * 0.8 + l * 0.4) * amp * 0.6;
+        const rx   = Math.max(3, baseRx + oscX);
+        const ry   = Math.max(3, baseRy + oscY);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = colors[l];
+        ctx.globalAlpha = 0.55 + 0.25 * (1 - layerFrac);
+        ctx.lineWidth   = 2.5 - 1.5 * layerFrac;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    if (state === 'playing') {
+      /* Laser beams — drawn behind the red square */
+      for (const lb of laserBeams) {
+        const progress = lb.durationMs / lb.maxDurationMs;
+        const fade     = Math.min(1, progress * 3);
+        const cos = Math.cos(playerDirAngle), sin = Math.sin(playerDirAngle);
+        const ex = redX + cos * lb.length, ey = redY + sin * lb.length;
+        const laserCol = getColor('laser');
+
+        ctx.save();
+        ctx.lineCap = 'round';
+
+        ctx.shadowColor = laserCol; ctx.shadowBlur = lb.width * 3;
+        ctx.strokeStyle = laserCol + Math.round(fade * 0.35 * 255).toString(16).padStart(2, '0');
+        ctx.lineWidth = lb.width * 3;
+        ctx.beginPath(); ctx.moveTo(redX, redY); ctx.lineTo(ex, ey); ctx.stroke();
+
+        ctx.shadowBlur = lb.width;
+        ctx.strokeStyle = laserCol + Math.round(fade * 0.7 * 255).toString(16).padStart(2, '0');
+        ctx.lineWidth = lb.width;
+        ctx.beginPath(); ctx.moveTo(redX, redY); ctx.lineTo(ex, ey); ctx.stroke();
+
+        ctx.shadowBlur = 4;
+        ctx.strokeStyle = '#ffffff' + Math.round(fade * 0.95 * 255).toString(16).padStart(2, '0');
+        ctx.lineWidth = lb.width * 0.3;
+        ctx.beginPath(); ctx.moveTo(redX, redY); ctx.lineTo(ex, ey); ctx.stroke();
+
+        // 8-point star at tip
+        ctx.shadowColor = laserCol; ctx.shadowBlur = lb.width * 2;
+        ctx.fillStyle = '#ffffff' + Math.round(fade * 255).toString(16).padStart(2, '0');
+        const starR = lb.width * 1.8, starInner = lb.width * 0.7;
+        ctx.beginPath();
+        for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * Math.PI * 2 - Math.PI / 2;
+          const r = i % 2 === 0 ? starR : starInner;
+          i === 0 ? ctx.moveTo(ex + Math.cos(a) * r, ey + Math.sin(a) * r)
+                  : ctx.lineTo(ex + Math.cos(a) * r, ey + Math.sin(a) * r);
+        }
+        ctx.closePath(); ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+
+      const flash = growFlash > Date.now();
+      const pCol = getColor('player');
+      if (invertTimer > 0) drawSlinkySquare(redX, redY, redSize, redSlinkySeed, now / 1000);
+      ctx.fillStyle = flash ? '#ff5566' : pCol;
+      const h = redSize * 0.5;
+      ctx.fillRect(redX - h, redY - h, redSize, redSize);
+      ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 1;
+      ctx.strokeRect(redX - h + 0.5, redY - h + 0.5, redSize - 1, redSize - 1);
+    }
+
+    /* Upgrade / level labels — whole text arched, multiple simultaneous */
+    statusLabels = statusLabels.filter(ul => ul.expiresAt > Date.now());
+
+    function drawUpgradeLabel(ul, idx) {
+      const remain   = ul.expiresAt - Date.now();
+      const progress = remain / 3000;
+      const alpha    = Math.min(1, remain / 400);
+      const slotY    = redSize * 0.8 + idx * 28 + (1 - progress) * 22;
+      const pump     = 1 + 0.55 * Math.max(0, progress - 0.7) / 0.3;
+
+      ctx.save();
+      ctx.translate(redX, redY - redSize * 0.5 - slotY);
+      ctx.scale(pump, pump);
+      ctx.font = '900 16px "Orbitron", sans-serif';
+      ctx.textBaseline = 'alphabetic';
+
+      const totalW   = ctx.measureText(ul.label).width;
+      const archR    = Math.max(totalW * 1.4, 140);
+      const totalAng = totalW / archR;
+
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.globalAlpha  = pass === 0 ? alpha : alpha * 0.95;
+        ctx.shadowColor  = ul.col;
+        ctx.shadowBlur   = pass === 0 ? 16 : 0;
+        ctx.fillStyle    = ul.col;
+
+        let charX = -totalW * 0.5;
+        for (const ch of ul.label) {
+          const cw  = ctx.measureText(ch).width;
+          const ang = ((charX + cw * 0.5) / totalW) * totalAng;
+          ctx.save();
+          ctx.translate(0, archR);   // move down to circle centre
+          ctx.rotate(ang);           // rotate to character position
+          ctx.translate(0, -archR);  // move back up to arc surface
+          ctx.textAlign = 'center';
+          ctx.fillText(ch, 0, 0);
+          ctx.restore();
+          charX += cw;
+        }
+      }
+
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur  = 0;
+      ctx.restore();
+    }
+
+    statusLabels.forEach(drawUpgradeLabel);
+
+  }
+
+
+  /* Start game */
+  function startGame() {
+    state        = 'playing';
+    squares      = []; shurikenProjectiles = []; boomerangs = []; bolts = []; bombRings = []; deathRings = []; laserBeams = []; whirlpoolProjectiles = [];
+    invertTimer  = 0; points = 0;
+    redSize      = RED_DEFAULT; maxRedSize = RED_DEFAULT;
+    redX         = mouseX; redY = mouseY; catchingUp = false; catchUpVX = 0; catchUpVY = 0;
+    direction    = 0; speedBoostMs = 0; chaosSpawnMs = 0; spawnAccum = 0;
+    growFlash    = 0; deathFlash = 0; redSlinkySeed = Math.random() * 100;
+    Object.keys(tiers).forEach(k => { tiers[k] = 1; });
+    pausedAt     = 0; pausedElapsed = 0;
+    logicAccum   = 0; lastFrameTs = 0; statusLabels = []; lastLevel = 1;
+    startTime    = Date.now();
+    overlay.classList.add('hidden');
+    hud.style.display = 'block';
+    document.body.classList.add('playing');
+  }
+
+  /* Input — mouse */
+  function updatePlayerDir(nx, ny) {
+    playerPosHistory.push({ x: nx, y: ny });
+    if (playerPosHistory.length > PLAYER_HIST_LEN) playerPosHistory.shift();
+    if (playerPosHistory.length < 2) return;
+    // Weighted sum of per-segment direction vectors (recent segments weighted higher)
+    let sx = 0, sy = 0;
+    for (let i = 1; i < playerPosHistory.length; i++) {
+      const w  = i; // linearly increasing weight — recent moves count more
+      const dx = playerPosHistory[i].x - playerPosHistory[i - 1].x;
+      const dy = playerPosHistory[i].y - playerPosHistory[i - 1].y;
+      const d  = Math.sqrt(dx * dx + dy * dy);
+      if (d > 0) { sx += (dx / d) * w; sy += (dy / d) * w; }
+    }
+    if (sx * sx + sy * sy > 0) playerDirAngle = Math.atan2(sy, sx);
+  }
+
+  document.addEventListener('mousemove', e => {
+    const dx = e.clientX - mouseX, dy = e.clientY - mouseY;
+    if (dx * dx + dy * dy > 1) updatePlayerDir(e.clientX, e.clientY);
+    lastMouseX = mouseX; lastMouseY = mouseY;
+    mouseX = e.clientX; mouseY = e.clientY;
+  });
+  document.getElementById('start-btn').addEventListener('click', startGame);
+
+  /* Input — touch: drag only activates when finger lands on the red square;
+     double-touch (2 fingers) on the square pauses the game              */
+  let touchDragging = false;
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    // Double-touch anywhere on the square → pause / resume
+    if (e.touches.length === 2) {
+      touchDragging = false;
+      if (state === 'playing') { pauseGame(); return; }
+      if (state === 'paused')  { resumeGame(); return; }
+      return;
+    }
+    const t = e.touches[0];
+    if (!t) return;
+    // Single touch: only begin drag if finger lands on the red square
+    if (state === 'playing' && intersects(t.clientX, t.clientY, 0, mouseX, mouseY, redSize)) {
+      touchDragging = true;
+    }
+  }, { passive: false });
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (!touchDragging) return;
+    const t = e.touches[0];
+    if (t) {
+      const dx = t.clientX - mouseX, dy = t.clientY - mouseY;
+      if (dx * dx + dy * dy > 1) updatePlayerDir(t.clientX, t.clientY);
+      mouseX = t.clientX; mouseY = t.clientY;
+    }
+  }, { passive: false });
+  canvas.addEventListener('touchend', e => {
+    e.preventDefault();
+    touchDragging = false;
+  }, { passive: false });
+  canvas.addEventListener('touchcancel', e => {
+    e.preventDefault();
+    touchDragging = false;
+  }, { passive: false });
+
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (state === 'playing') { pauseGame(); return; }
+      if (state === 'paused')  { resumeGame(); return; }
+    }
+    if (e.key === 'd' || e.key === 'D') {
+      darkMode = !darkMode;
+      applyDarkMode();
+      const btn = document.getElementById('dark-toggle-btn');
+      if (btn) {
+        btn.textContent = darkMode ? '◑ DARK MODE ON' : '◑ DARK MODE OFF';
+        btn.classList.toggle('active', darkMode);
+      }
+      if (state === 'playing') {
+        statusLabels.push({ label: darkMode ? 'DARK MODE ON' : 'DARK MODE OFF', col: darkMode ? '#e8e8e8' : '#111111', expiresAt: Date.now() + 3000, spawnedAt: Date.now() });
+      }
+    }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      colorblind = !colorblind;
+      applyColorblind();
+      // Update toggle button label if visible (start/pause screens)
+      const btn = document.getElementById('cb-toggle-btn');
+      if (btn) {
+        btn.textContent = colorblind ? '◐ COLORBLIND ON' : '◐ COLORBLIND OFF';
+        btn.classList.toggle('active', colorblind);
+      }
+      if (state === 'playing') {
+        statusLabels.push({ label: colorblind ? 'COLORBLIND ON' : 'COLORBLIND OFF', col: colorblind ? '#785ef0' : '#0000ff', expiresAt: Date.now() + 3000, spawnedAt: Date.now() });
+      }
+    }
+  });
+
+  /* Main loop: fixed 60fps logic + uncapped draw */
+  function loop(now) {
+    if (lastFrameTs === 0) lastFrameTs = now;
+    const frameMs = Math.min(now - lastFrameTs, 100);
+    lastFrameTs = now;
+    logicAccum += frameMs;
+    while (logicAccum >= TICK_MS) { tick(TICK_MS); logicAccum -= TICK_MS; }
+    draw(now);
+    requestAnimationFrame(loop);
+  }
+
+  requestAnimationFrame(loop);
+
+  /* ─── Service Worker registration ───────────────── */
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/squarez/sw.js').catch(() => {});
+    });
+  }
+
+  /* ─── Shared slinky colors (title animation + mushroom effect) ──
+     Derived at draw-time from the active palette so colorblind mode
+     is reflected automatically.                                     */
+  function getSlinkyColors() {
+    const seen = new Set();
+    return Object.values(colorblind ? PALETTE.colorblind : PALETTE.normal)
+      .filter(c => { const k = c.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+  }
+  /* ─── Slinky title animation ─────────────────────────
+     Ghost layers of "SQUAREZ" in square colors ripple
+     behind the black foreground text like a coiled spring.
+     initSlinky() can be called again after DOM rebuild.   */
+  function initSlinky(text = 'SQUAREZ') {
+    const sc  = document.getElementById('slinky-canvas');
+    const el  = document.getElementById('ov-title');
+    if (!sc || !el) return;
+    const stx = sc.getContext('2d');
+
+    let startTs = null;
+    let running = true;
+
+    function resizeSlinky() {
+      const r   = el.getBoundingClientRect();
+      const pad = Math.round(r.height * 0.9);
+      sc.width  = Math.round(r.width)  + pad * 2;
+      sc.height = Math.round(r.height) + pad * 2;
+      sc.style.width  = sc.width  + 'px';
+      sc.style.height = sc.height + 'px';
+    }
+
+    // Stop any previous slinky loop when DOM was rebuilt
+    if (window._slinkyStop) window._slinkyStop();
+    window._slinkyStop = () => { running = false; };
+
+    document.fonts.ready.then(() => {
+      resizeSlinky();
+      window.addEventListener('resize', resizeSlinky);
+      requestAnimationFrame(ts => frameSlinky(ts));
+    });
+
+    function frameSlinky(ts) {
+      if (!running) return;
+      if (!startTs) startTs = ts;
+      const t = (ts - startTs) / 1000;
+
+      const colors = getSlinkyColors();
+      const LAYERS = colors.length;
+      const r    = el.getBoundingClientRect();
+      const padX = sc.width  * 0.5 - r.width  * 0.5;
+      const padY = sc.height * 0.5 - r.height * 0.5;
+
+      stx.clearRect(0, 0, sc.width, sc.height);
+
+      const cs   = window.getComputedStyle(el);
+      stx.font   = `900 ${cs.fontSize} Orbitron, sans-serif`;
+      stx.textBaseline  = 'top';
+      stx.letterSpacing = '-0.02em';
+
+      for (let l = LAYERS - 1; l >= 0; l--) {
+        const layerFrac = (l + 1) / LAYERS;
+        const amp       = 5 + l * 3.2;
+        stx.fillStyle   = colors[l];
+        stx.globalAlpha = 0.11 + 0.05 * (1 - layerFrac);
+        let cx = padX;
+        for (let ci = 0; ci < text.length; ci++) {
+          const ch    = text[ci];
+          const phase = (ci / text.length) * Math.PI * 2;
+          const osc   = Math.sin(t * 3.5 + phase - l * 0.55) * amp;
+          const osc2  = Math.cos(t * 1.8 + phase * 0.7 - l * 0.3) * amp * 0.4;
+          stx.fillText(ch, cx + osc2, padY + osc);
+          cx += stx.measureText(ch).width;
+        }
+      }
+
+      stx.globalAlpha = 1;
+      requestAnimationFrame(ts => frameSlinky(ts));
+    }
+  }
+  initSlinky();
+
+  /* ─── PWA install prompt ─────────────────────────── */
+  // Install logic handled by external JS. wireInstallBtn wires the button
+  // to window._dip (deferredInstallPrompt stored by external script).
+  function wireInstallBtn() {
+    const ib = document.getElementById('install-btn');
+    if (!ib) return;
+    ib.onclick = () => {
+      const dip = window._dip;
+      if (!dip) return;
+      dip.prompt();
+      dip.userChoice.then(() => {
+        window._dip = null;
+        ib.style.display = 'none';
+      });
+    };
+    if (window._dip) ib.style.display = '';
+  }
+
+  wireInstallBtn();
+
+  /* ─── Colorblind toggle button ───────────────────── */
+  function wireCbToggle() {
+    const btn = document.getElementById('cb-toggle-btn');
+    if (!btn) return;
+    function updateCbBtn() {
+      btn.textContent = colorblind ? '◐ COLORBLIND ON' : '◐ COLORBLIND OFF';
+      btn.classList.toggle('active', colorblind);
+    }
+    updateCbBtn();
+    btn.addEventListener('click', () => {
+      colorblind = !colorblind;
+      applyColorblind();
+      updateCbBtn();
+      if (state === 'playing') {
+        statusLabels.push({ label: colorblind ? 'COLORBLIND ON' : 'COLORBLIND OFF', col: colorblind ? '#785ef0' : '#0000ff', expiresAt: Date.now() + 3000, spawnedAt: Date.now() });
+      }
+    });
+  }
+  wireCbToggle();
+
+  /* ─── Dark mode toggle ───────────────────────────── */
+  function applyColorblind() {
+    squares.forEach(sq => { sq.color = getColor(sq.type); });
+    frozen.squares.forEach(sq => { sq.color = getColor(sq.type); });
+    buildLegend();
+  }
+
+  function applyDarkMode() {
+    document.body.classList.toggle('dark', darkMode);
+    squares.forEach(sq => { sq.color = getColor(sq.type); });
+    frozen.squares.forEach(sq => { sq.color = getColor(sq.type); });
+    buildLegend();
+  }
+
+  function wireDarkToggle() {
+    const btn = document.getElementById('dark-toggle-btn');
+    if (!btn) return;
+    function updateBtn() {
+      btn.textContent = darkMode ? '◑ DARK MODE ON' : '◑ DARK MODE OFF';
+      btn.classList.toggle('active', darkMode);
+    }
+    updateBtn();
+    btn.addEventListener('click', () => {
+      darkMode = !darkMode;
+      applyDarkMode();
+      updateBtn();
+      if (state === 'playing') {
+        statusLabels.push({ label: darkMode ? 'DARK MODE ON' : 'DARK MODE OFF', col: darkMode ? '#e8e8e8' : '#111111', expiresAt: Date.now() + 3000, spawnedAt: Date.now() });
+      }
+    });
+  }
+  wireDarkToggle();
+
+})();
+</script>
+</body>
+</html>
