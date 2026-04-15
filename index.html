@@ -822,6 +822,7 @@
   /* Return to start screen */
   function goToMenu() {
     state = 'menu';
+    deathFlash = 0;
     squares = []; shurikenProjectiles = []; boomerangs = []; bolts = []; bombRings = [];
     invertTimer = 0;
     document.body.classList.remove('playing');
