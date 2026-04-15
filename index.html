@@ -405,7 +405,7 @@
      Each entry: { size, color is set at spawn via getColor(), negative?, frequency(t), legend? }
      t = level progression 0..1                        */
   const SQUARES = {
-    blue:      { size: 1.0, frequency: t => 60 - 10 * t,  legend: 'GROW'    },
+    blue:      { size: 1.0, frequency: t => 60 - 10 * t,   legend: 'GROW'    },
     green:     { size: 0.8, frequency: () => 10,           legend: 'SHRINK'  },
     magenta:   { size: 0.5, frequency: () => 0.1,          legend: 'BOOST'   },
     upgrade:   { size: 1.0, frequency: () => Object.values(tiers).every(v => v >= 4) ? 0 : 1, legend: 'UPGRADE' },
@@ -415,9 +415,9 @@
     boomerang: { size: 1.0, frequency: () => 1.0                             },
     laser:     { size: 1.0, frequency: () => 1.0                             },
     whirlpool: { size: 1.0, frequency: () => 1.0                             },
-    mushroom:  { size: 1.0, frequency: t => 1 + 4 * t,    negative: true, legend: 'NERF' },
-    rotation:  { size: 1.0, frequency: t => 1 + 9 * t,    negative: true    },
-    switch:    { size: 1.0, frequency: t => 1 + 4 * t,    negative: true    },
+    mushroom:  { size: 1.0, frequency: t => 1 + 4 * t,     negative: true, legend: 'NERF' },
+    rotation:  { size: 1.0, frequency: t => 1 + 9 * t,     negative: true    },
+    switch:    { size: 1.0, frequency: t => 1 + 4 * t,     negative: true    },
     black:     { size: 1.2, frequency: t => 20 + 40 * t,   legend: 'DEATH'   },
   };
 
@@ -572,6 +572,7 @@
         points += 10; redSize += 50;
         speedBoostMs = 6000; chaosSpawnMs = 6000;
         growFlash = Date.now() + 400;
+        incAchStat('boostCount');
         statusLabels.push({ label: 'BOOST', col: getColor('magenta'), expiresAt: Date.now() + 3000, spawnedAt: Date.now() }); break;
       case 'green':   redSize = RED_DEFAULT; break;
       case 'black':   triggerGameOver(); return;
@@ -579,7 +580,7 @@
       case 'shuriken':  launchShuriken(ox, oy);  break;
       case 'lightning': launchLightning(ox, oy); break;
       case 'bomb':      triggerBomb(ox, oy);     break;
-      case 'mushroom':  invertTimer = 5000; break;
+      case 'mushroom':  invertTimer = 5000; incAchStat('mushroomCount'); break;
       case 'switch':    triggerSwitch(); break;
       case 'upgrade':   triggerUpgrade(); break;
       case 'boomerang': launchBoomerangs(ox, oy); break;
@@ -588,10 +589,13 @@
     }
     redSize = Math.min(redSize, Math.min(W, H) * 0.40);
     if (redSize > maxRedSize) maxRedSize = redSize;
+    recordKill();
+    checkAchievements();
   }
 
   /* Universal hit handler */
   function applyHit(type, ox, oy) {
+    recordKill();
     if (type === 'black' || NEGATIVE_TYPES.has(type)) return; // silently removed
     queueEffect(type, ox, oy);
     drainEffects();
@@ -685,6 +689,81 @@
 
   let statusLabels = [];
   let lastLevel     = 1;
+
+  /* ─── Achievement system ─────────────────────────────
+     Counters that persist across games via sessionStorage.
+     Each achievement fires once; earned set stored as JSON. */
+  const ACH_COL = '#FF9500'; // golden orange
+
+  const ACHIEVEMENTS = {
+    mushroom420: {
+      label: 'MYCONAUT',
+      check: () => getAchStat('mushroomCount') >= 420,
+    },
+    allMaxed: {
+      label: 'FULLY LOADED',
+      check: () => Object.values(tiers).every(v => v >= 4),
+    },
+    level10: {
+      label: 'VETERAN',
+      check: () => Math.floor(getLevel()) >= 10,
+    },
+    blender: {
+      label: 'BLENDER',
+      check: () => getRecentKills() >= 100,
+    },
+    boost69: {
+      label: 'NICE',
+      check: () => getAchStat('boostCount') >= 69,
+    },
+    absoluteUnit: {
+      label: 'ABSOLUTE UNIT',
+      check: () => redSize >= 100,
+    },
+  };
+
+  function getAchStat(key) {
+    return parseInt(sessionStorage.getItem('ach_' + key) || '0', 10);
+  }
+  function incAchStat(key, by = 1) {
+    sessionStorage.setItem('ach_' + key, getAchStat(key) + by);
+  }
+  function getEarned() {
+    try { return new Set(JSON.parse(sessionStorage.getItem('ach_earned') || '[]')); }
+    catch { return new Set(); }
+  }
+  function markEarned(id) {
+    const s = getEarned(); s.add(id);
+    sessionStorage.setItem('ach_earned', JSON.stringify([...s]));
+  }
+
+  // Sliding window for "100 kills in 10 seconds"
+  const killTimestamps = [];
+  function recordKill() {
+    killTimestamps.push(Date.now());
+  }
+  function getRecentKills() {
+    const cutoff = Date.now() - 10000;
+    // Trim old entries
+    while (killTimestamps.length && killTimestamps[0] < cutoff) killTimestamps.shift();
+    return killTimestamps.length;
+  }
+
+  function checkAchievements() {
+    const earned = getEarned();
+    for (const [id, ach] of Object.entries(ACHIEVEMENTS)) {
+      if (earned.has(id)) continue;
+      if (ach.check()) {
+        markEarned(id);
+        statusLabels.push({
+          label: `Achievement  ›  ${ach.label}`,
+          col: ACH_COL,
+          expiresAt: Date.now() + 4000,
+          spawnedAt: Date.now(),
+        });
+      }
+    }
+  }
 
   /* Effect queue */
   let effectQueue     = [];
@@ -857,6 +936,7 @@
     if (floorLevel > lastLevel) {
       lastLevel = floorLevel;
       statusLabels.push({ label: `LEVEL  ${floorLevel}`, col: getColor('player'), expiresAt: Date.now() + 3000, spawnedAt: Date.now() });
+      checkAchievements();
     }
 
     /* Movement scale: px-per-tick * speed-mult */
@@ -888,6 +968,9 @@
     for (const sq of redHits) applyEffect(sq.type, sq.x, sq.y);
 
     if (invertTimer > 0) invertTimer -= dt;
+
+    /* Check sliding-window achievements each tick */
+    if (getRecentKills() >= 100) checkAchievements();
 
     /* Shuriken projectiles */
     shurikenProjectiles = shurikenProjectiles.filter(pr => {
