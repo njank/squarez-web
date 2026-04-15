@@ -4,6 +4,7 @@
 const CACHE  = 'squarez-v1';
 const ASSETS = [
   './index.html',
+  './logo.svg',
   './manifest.json',
   'https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap',
 ];
@@ -36,6 +37,6 @@ self.addEventListener('fetch', e => {
         }
         return response;
       });
-    }).catch(() => caches.match('./squarez.html'))
+    }).catch(() => caches.match('./index.html'))
   );
 });
